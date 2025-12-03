@@ -1,0 +1,61 @@
+:root {
+  --bg: #0b1221;
+  --panel: #0f1a2a;
+  --accent: #d9e6f2;
+  --muted: #97a6bd;
+}
+* {
+  box-sizing: border-box;
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: linear-gradient(180deg, var(--bg), #07111b);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.container {
+  width: 900px;
+  max-width: 95%;
+  padding: 18px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 6px 30px rgba(2, 6, 23, 0.6);
+  text-align: center;
+}
+h1 {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.scoreboard {
+  display: flex;
+  justify-content: space-between;
+  max-width: 400px;
+  margin: 0 auto 10px;
+  font-size: 28px;
+}
+.scoreboard > div {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 0 6px;
+}
+canvas {
+  display: block;
+  margin: 10px auto;
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+.controls {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 10px;
+}

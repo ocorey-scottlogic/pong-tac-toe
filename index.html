@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pong - Minimal</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Pong</h1>
+      <div class="scoreboard">
+        <div id="score-left">0</div>
+        <div id="score-right">0</div>
+      </div>
+      <canvas id="game" width="800" height="500"></canvas>
+      <div class="controls">
+        <p>
+          <strong>Left:</strong> W / S &nbsp; • &nbsp; <strong>Right:</strong> ↑
+          / ↓
+        </p>
+        <p>
+          <strong>Space</strong> to pause, <strong>R</strong> to reset,
+          <strong>A</strong> toggles AI
+        </p>
+      </div>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>
