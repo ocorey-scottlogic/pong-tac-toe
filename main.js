@@ -328,6 +328,19 @@ function update() {
           token.vx *= scale;
           token.vy *= scale;
         }
+      } else {
+        // bounce off occupied cell based on which edge we hit
+        const r = gridCellRect(cellIndex);
+        const cx = r.x + r.w / 2,
+          cy = r.y + r.h / 2;
+        const distX = Math.abs(token.x - cx);
+        const distY = Math.abs(token.y - cy);
+        // bounce horizontally or vertically depending on which edge is closer
+        if (distX > distY) {
+          token.vx *= -1; // bounce left/right
+        } else {
+          token.vy *= -1; // bounce up/down
+        }
       }
     }
 
