@@ -52,6 +52,8 @@ function spawnParticles(x, y, color) {
 const overlay = document.getElementById("overlay");
 const overlayText = document.getElementById("overlayText");
 const newGameBtn = document.getElementById("newGameBtn");
+const removalMessage = document.getElementById("removalMessage");
+const removalMessageText = document.getElementById("removalMessageText");
 
 function spawnToken() {
   // spawn with a stronger initial velocity biased horizontally (speed 3..6)
@@ -191,7 +193,20 @@ function removeRandomTokenFor(type) {
   );
   playSound("place");
   tttBoard[pick] = null;
+  // show removal message at bottom of screen
+  showRemovalMessage(
+    (type === "X" ? "X" : "O") + " was removed from the board"
+  );
   return true;
+}
+
+function showRemovalMessage(text, ms = 900) {
+  if (!removalMessage) return;
+  removalMessageText.textContent = text;
+  removalMessage.classList.remove("hidden");
+  setTimeout(() => {
+    removalMessage.classList.add("hidden");
+  }, ms);
 }
 
 function showOverlay(text) {
@@ -367,10 +382,8 @@ function update() {
       if (token.x < -50) {
         // left lost a pong point -> remove a random X
         removeRandomTokenFor("X");
-        showTemporaryMessage("Left lost a point — a random X was removed");
       } else {
         removeRandomTokenFor("O");
-        showTemporaryMessage("Right lost a point — a random O was removed");
       }
       // respawn token
       spawnToken();
