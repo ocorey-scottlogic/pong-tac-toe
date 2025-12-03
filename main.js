@@ -28,14 +28,38 @@ let gameOver = false;
 let token = null; // {x,y,vx,vy,r,type}
 let nextType = "X";
 
+// Visual particles for hit effects
+let particles = [];
+
+function spawnParticles(x, y, color) {
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = 1 + Math.random() * 3;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 0.4 + Math.random() * 0.4,
+      r: 2 + Math.random() * 3,
+      color,
+    });
+  }
+}
+
 // overlay
 const overlay = document.getElementById("overlay");
 const overlayText = document.getElementById("overlayText");
 const newGameBtn = document.getElementById("newGameBtn");
 
 function spawnToken() {
-  // spawn with a stronger initial velocity (random direction, speed 3..6)
-  const angle = Math.random() * Math.PI * 2;
+  // spawn with a stronger initial velocity biased horizontally (speed 3..6)
+  // choose left or right with a small vertical spread to avoid near-vertical starts
+  const side = Math.random() > 0.5 ? 1 : -1; // 1 => right, -1 => left
+  const spread = Math.PI / 6; // +/- 15 degrees
+  const base = side === 1 ? 0 : Math.PI;
+  const angle = base + (Math.random() - 0.5) * spread;
   const speed = 3 + Math.random() * 3; // 3..6
   const vx = Math.cos(angle) * speed;
   const vy = Math.sin(angle) * speed;
@@ -140,6 +164,30 @@ function resetMatch() {
   spawnToken();
 }
 
+function showTemporaryMessage(text, ms = 900) {
+  showOverlay(text);
+  setTimeout(() => {
+    if (!gameOver) hideOverlay();
+  }, ms);
+}
+
+function removeRandomTokenFor(type) {
+  const indices = [];
+  for (let i = 0; i < 9; i++) if (tttBoard[i] === type) indices.push(i);
+  if (indices.length === 0) return false;
+  const pick = indices[Math.floor(Math.random() * indices.length)];
+  const r = gridCellRect(pick);
+  // particle and sound feedback
+  spawnParticles(
+    r.x + r.w / 2,
+    r.y + r.h / 2,
+    type === "X" ? "#ffdca3" : "#a8f0c3"
+  );
+  playSound("place");
+  tttBoard[pick] = null;
+  return true;
+}
+
 function showOverlay(text) {
   if (!overlay) return;
   overlayText.textContent = text;
@@ -210,6 +258,8 @@ function update() {
         token.vy += (Math.random() - 0.5) * 2;
         token.wasHit = true;
         token.type = "X";
+        token.hitFlash = 0.35;
+        spawnParticles(token.x, token.y, "#ffdca3");
         playSound("paddle");
       }
     }
@@ -220,6 +270,8 @@ function update() {
         token.vy += (Math.random() - 0.5) * 2;
         token.wasHit = true;
         token.type = "O";
+        token.hitFlash = 0.35;
+        spawnParticles(token.x, token.y, "#a8f0c3");
         playSound("paddle");
       }
     }
@@ -238,6 +290,8 @@ function update() {
         token.y = cy;
         token.vx = 0;
         token.vy = 0;
+        // clear any existing small particles so snap is visible
+        particles = particles.filter((p) => p.life > 0.02);
         playSound("place");
         // short delay so player sees the snap
         setTimeout(() => {
@@ -260,11 +314,30 @@ function update() {
         break;
       }
     }
-    // out of bounds -> wrap or bounce horizontally
+    // out of bounds -> remove a random mark from the losing player, then respawn
     if (token && (token.x < -50 || token.x > WIDTH + 50)) {
-      // reset to center if lost
+      // determine which side lost: token passed left -> left lost; passed right -> right lost
+      if (token.x < -50) {
+        // left lost a pong point -> remove a random X
+        removeRandomTokenFor("X");
+        showTemporaryMessage("Left lost a point — a random X was removed");
+      } else {
+        removeRandomTokenFor("O");
+        showTemporaryMessage("Right lost a point — a random O was removed");
+      }
+      // respawn token
       spawnToken();
     }
+  }
+
+  // update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.06; // small gravity
+    p.life -= 0.016;
+    if (p.life <= 0) particles.splice(i, 1);
   }
 }
 
@@ -316,6 +389,33 @@ function draw() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(token.type, token.x, token.y);
+  }
+  // draw particles
+  if (particles.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / 0.6);
+      ctx.fillStyle = p.color || "#fff";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  // token hit flash ring
+  if (token && token.hitFlash && token.hitFlash > 0) {
+    const t = token.hitFlash;
+    const max = 18;
+    const r = token.r + (1 - t / 0.35) * max;
+    ctx.strokeStyle = "rgba(255,255,255," + 0.6 * (t / 0.35) + ")";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(token.x, token.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // decay
+    token.hitFlash = Math.max(0, token.hitFlash - 0.016);
   }
 }
 
