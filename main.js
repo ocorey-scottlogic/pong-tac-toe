@@ -350,11 +350,7 @@ function update() {
           const type = tttBoard[cellIndex];
           tttBoard[cellIndex] = null;
           tttBoardHits[cellIndex] = 0;
-          spawnParticles(
-            cx,
-            cy,
-            type === "X" ? "#ffdca3" : "#a8f0c3"
-          );
+          spawnParticles(cx, cy, type === "X" ? "#ffdca3" : "#a8f0c3");
           playSound("place");
         }
       }
