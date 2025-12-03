@@ -60,7 +60,7 @@ function spawnToken() {
   const spread = Math.PI / 6; // +/- 15 degrees
   const base = side === 1 ? 0 : Math.PI;
   const angle = base + (Math.random() - 0.5) * spread;
-  const speed = 3 + Math.random() * 3; // 3..6
+  const speed = 5 + Math.random() * 4; // 5..9 (faster)
   const vx = Math.cos(angle) * speed;
   const vy = Math.sin(angle) * speed;
   token = {
@@ -119,6 +119,12 @@ const grid = {
   x: WIDTH / 2 - 150,
   y: HEIGHT / 2 - 150,
 };
+
+// When a token is over the tic-tac-toe grid we slowly damp its velocity
+// so it will settle; snapping only occurs when speed is below a threshold.
+const GRID_DAMPING = 0.97; // multiply velocities by this each frame when on-grid
+const SNAP_SPEED_THRESHOLD = 1.4; // only snap into a cell when speed <= this
+const MIN_VELOCITY = 0.5; // minimum velocity to maintain while on grid (prevents creeping to zero)
 
 function gridCellRect(i) {
   const col = i % 3;
@@ -244,18 +250,20 @@ function update() {
   if (token) {
     token.x += token.vx;
     token.y += token.vy;
-    // no damping: token keeps its velocity until hit or bounced
+
     // walls
     if (token.y - token.r <= 0 || token.y + token.r >= HEIGHT) {
       token.vy *= -1;
       token.y = clamp(token.y, token.r, HEIGHT - token.r);
     }
+
     // paddle collisions - left
     if (token.x - token.r <= left.x + left.w && token.x - token.r > left.x) {
       if (token.y >= left.y && token.y <= left.y + left.h) {
         token.x = left.x + left.w + token.r;
-        token.vx = Math.abs(token.vx) + 1.2;
-        token.vy += (Math.random() - 0.5) * 2;
+        // stronger horizontal impulse and larger vertical variance to increase difficulty
+        token.vx = Math.abs(token.vx) + 2.4;
+        token.vy += (Math.random() - 0.5) * 3;
         token.wasHit = true;
         token.type = "X";
         token.hitFlash = 0.35;
@@ -266,8 +274,8 @@ function update() {
     if (token.x + token.r >= right.x && token.x + token.r < right.x + right.w) {
       if (token.y >= right.y && token.y <= right.y + right.h) {
         token.x = right.x - token.r;
-        token.vx = -Math.abs(token.vx) - 1.2;
-        token.vy += (Math.random() - 0.5) * 2;
+        token.vx = -Math.abs(token.vx) - 2.4;
+        token.vy += (Math.random() - 0.5) * 3;
         token.wasHit = true;
         token.type = "O";
         token.hitFlash = 0.35;
@@ -276,8 +284,40 @@ function update() {
       }
     }
 
-    // check if token settled inside an empty cell
-    // snap-to-grid placement: if token center enters any empty cell, snap it immediately
+    // If token is over the grid area and has been hit, gradually damp its speed so it can settle.
+    const inGridX = token.x >= grid.x && token.x <= grid.x + grid.size;
+    const inGridY = token.y >= grid.y && token.y <= grid.y + grid.size;
+    const onGrid = inGridX && inGridY;
+    if (onGrid && token.wasHit) {
+      // check which cell the token is in
+      let cellIndex = -1;
+      for (let i = 0; i < 9; i++) {
+        const r = gridCellRect(i);
+        const cx = r.x + r.w / 2,
+          cy = r.y + r.h / 2;
+        const distX = Math.abs(token.x - cx),
+          distY = Math.abs(token.y - cy);
+        if (distX < r.w / 2 && distY < r.h / 2) {
+          cellIndex = i;
+          break;
+        }
+      }
+      // only damp if the cell is empty
+      if (cellIndex === -1 || !tttBoard[cellIndex]) {
+        token.vx *= GRID_DAMPING;
+        token.vy *= GRID_DAMPING;
+        // maintain a minimum velocity to keep the token moving
+        const speed = Math.hypot(token.vx, token.vy);
+        if (speed > 0 && speed < MIN_VELOCITY) {
+          const scale = MIN_VELOCITY / speed;
+          token.vx *= scale;
+          token.vy *= scale;
+        }
+      }
+    }
+
+    // check if token can settle inside an empty cell
+    // snap-to-grid placement: only snap if token was hit and its speed is low enough
     for (let i = 0; i < 9; i++) {
       const r = gridCellRect(i);
       const cx = r.x + r.w / 2,
@@ -285,35 +325,42 @@ function update() {
       const distX = Math.abs(token.x - cx),
         distY = Math.abs(token.y - cy);
       if (distX < r.w / 2 && distY < r.h / 2 && !tttBoard[i] && token.wasHit) {
-        // snap token to cell center for a brief visual, then place
-        token.x = cx;
-        token.y = cy;
-        token.vx = 0;
-        token.vy = 0;
-        // clear any existing small particles so snap is visible
-        particles = particles.filter((p) => p.life > 0.02);
-        playSound("place");
-        // short delay so player sees the snap
-        setTimeout(() => {
-          placeTokenInCell(i, token.type);
-          token = null;
-          const res = checkWinner();
-          if (res === "X" || res === "O") {
-            gameOver = true;
-            showOverlay((res === "X" ? "X" : "O") + " wins!");
-          } else if (res === "TIE") {
-            gameOver = true;
-            showOverlay("Tie Game");
-          } else {
-            // spawn next token after a short pause
-            setTimeout(() => {
-              spawnToken();
-            }, 300);
-          }
-        }, 90);
-        break;
+        const speed = Math.hypot(token.vx, token.vy);
+        // only snap into place when slow enough
+        if (speed <= SNAP_SPEED_THRESHOLD) {
+          // snap token to cell center for a brief visual, then place
+          token.x = cx;
+          token.y = cy;
+          token.vx = 0;
+          token.vy = 0;
+          // clear any existing small particles so snap is visible
+          particles = particles.filter((p) => p.life > 0.02);
+          playSound("place");
+          // short delay so player sees the snap
+          setTimeout(() => {
+            placeTokenInCell(i, token.type);
+            token = null;
+            const res = checkWinner();
+            if (res === "X" || res === "O") {
+              gameOver = true;
+              showOverlay((res === "X" ? "X" : "O") + " wins!");
+            } else if (res === "TIE") {
+              gameOver = true;
+              showOverlay("Tie Game");
+            } else {
+              // spawn next token after a short pause
+              setTimeout(() => {
+                spawnToken();
+              }, 300);
+            }
+          }, 90);
+          break;
+        } else {
+          // If still too fast, you might want a small visual hint later (optional)
+        }
       }
     }
+
     // out of bounds -> remove a random mark from the losing player, then respawn
     if (token && (token.x < -50 || token.x > WIDTH + 50)) {
       // determine which side lost: token passed left -> left lost; passed right -> right lost
