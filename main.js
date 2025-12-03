@@ -22,6 +22,7 @@ const audioCtx =
 
 // Tic-Tac-Toe state
 let tttBoard = Array(9).fill(null); // 'X' or 'O'
+let tttBoardHits = Array(9).fill(0); // hit counter for each cell
 let gameOver = false;
 
 // Token being hit into cells
@@ -167,6 +168,7 @@ function checkWinner() {
 
 function resetMatch() {
   tttBoard = Array(9).fill(null);
+  tttBoardHits = Array(9).fill(0);
   gameOver = false;
   hideOverlay();
   spawnToken();
@@ -340,6 +342,20 @@ function update() {
           token.vx *= -1; // bounce left/right
         } else {
           token.vy *= -1; // bounce up/down
+        }
+        // increment hit counter for this cell
+        tttBoardHits[cellIndex]++;
+        // if hit 3 times, destroy the token
+        if (tttBoardHits[cellIndex] >= 3) {
+          const type = tttBoard[cellIndex];
+          tttBoard[cellIndex] = null;
+          tttBoardHits[cellIndex] = 0;
+          spawnParticles(
+            cx,
+            cy,
+            type === "X" ? "#ffdca3" : "#a8f0c3"
+          );
+          playSound("place");
         }
       }
     }
