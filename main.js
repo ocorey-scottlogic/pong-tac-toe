@@ -30,7 +30,7 @@ let tokens = []; // Array of {x,y,vx,vy,r,type}
 let nextType = "X";
 
 // Auto-spawn settings
-const SPAWN_INTERVAL = 1000; // 0.5 seconds
+const SPAWN_INTERVAL = 1000; // 1 second
 const MAX_TOKENS = 5;
 let lastSpawnTime = 0;
 
