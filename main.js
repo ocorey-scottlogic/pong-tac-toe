@@ -26,8 +26,13 @@ let tttBoardHits = Array(9).fill(0); // hit counter for each cell
 let gameOver = false;
 
 // Token being hit into cells
-let token = null; // {x,y,vx,vy,r,type}
+let tokens = []; // Array of {x,y,vx,vy,r,type}
 let nextType = "X";
+
+// Auto-spawn settings
+const SPAWN_INTERVAL = 1000; // 0.5 seconds
+const MAX_TOKENS = 5;
+let lastSpawnTime = 0;
 
 // Visual particles for hit effects
 let particles = [];
@@ -66,7 +71,7 @@ function spawnToken() {
   const speed = 5 + Math.random() * 4; // 5..9 (faster)
   const vx = Math.cos(angle) * speed;
   const vy = Math.sin(angle) * speed;
-  token = {
+  tokens.push({
     x: WIDTH / 2,
     y: HEIGHT / 2,
     vx,
@@ -74,8 +79,9 @@ function spawnToken() {
     r: 12,
     type: nextType,
     wasHit: false,
-  };
+  });
   nextType = nextType === "X" ? "O" : "X";
+  lastSpawnTime = Date.now();
 }
 
 function drawRect(x, y, w, h, color) {
@@ -171,6 +177,7 @@ function resetMatch() {
   tttBoardHits = Array(9).fill(0);
   gameOver = false;
   hideOverlay();
+  tokens = [];
   spawnToken();
 }
 
@@ -247,6 +254,15 @@ function handlePointer(e) {
 
 function update() {
   if (!running || gameOver) return;
+  
+  // Auto-spawn logic
+  const now = Date.now();
+  if (tokens.length === 0) {
+      spawnToken();
+  } else if (tokens.length < MAX_TOKENS && now - lastSpawnTime > SPAWN_INTERVAL) {
+      spawnToken();
+  }
+
   // paddles
   if (keys["w"]) left.y -= left.speed;
   if (keys["s"]) left.y += left.speed;
@@ -256,15 +272,44 @@ function update() {
   }
   left.y = clamp(left.y, 0, HEIGHT - left.h);
   right.y = clamp(right.y, 0, HEIGHT - right.h);
+  
   if (aiEnabled) {
-    const target = token ? token.y : HEIGHT / 2;
+    // Find the most relevant token to target
+    // Prefer tokens moving towards the right paddle (vx > 0)
+    // Among those, pick the one closest to the paddle
+    let targetToken = null;
+    let minDist = Infinity;
+    
+    for (const t of tokens) {
+      if (t.vx > 0) {
+        const dist = (WIDTH - 20) - t.x;
+        if (dist < minDist) {
+          minDist = dist;
+          targetToken = t;
+        }
+      }
+    }
+    // If no token moving towards us, just pick the closest one
+    if (!targetToken && tokens.length > 0) {
+      minDist = Infinity;
+      for (const t of tokens) {
+        const dist = Math.abs((WIDTH - 20) - t.x);
+        if (dist < minDist) {
+          minDist = dist;
+          targetToken = t;
+        }
+      }
+    }
+
+    const target = targetToken ? targetToken.y : HEIGHT / 2;
     const diff = target - right.y;
     right.y += Math.sign(diff) * Math.min(Math.abs(diff), right.speed * 0.9);
     right.y = clamp(right.y, 0, HEIGHT - right.h);
   }
 
   // token physics
-  if (token) {
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = tokens[i];
     token.x += token.vx;
     token.y += token.vy;
 
@@ -308,14 +353,14 @@ function update() {
     if (onGrid && token.wasHit) {
       // check which cell the token is in
       let cellIndex = -1;
-      for (let i = 0; i < 9; i++) {
-        const r = gridCellRect(i);
+      for (let j = 0; j < 9; j++) {
+        const r = gridCellRect(j);
         const cx = r.x + r.w / 2,
           cy = r.y + r.h / 2;
         const distX = Math.abs(token.x - cx),
           distY = Math.abs(token.y - cy);
         if (distX < r.w / 2 && distY < r.h / 2) {
-          cellIndex = i;
+          cellIndex = j;
           break;
         }
       }
@@ -358,13 +403,14 @@ function update() {
 
     // check if token can settle inside an empty cell
     // snap-to-grid placement: only snap if token was hit and its speed is low enough
-    for (let i = 0; i < 9; i++) {
-      const r = gridCellRect(i);
+    let tokenRemoved = false;
+    for (let j = 0; j < 9; j++) {
+      const r = gridCellRect(j);
       const cx = r.x + r.w / 2,
         cy = r.y + r.h / 2;
       const distX = Math.abs(token.x - cx),
         distY = Math.abs(token.y - cy);
-      if (distX < r.w / 2 && distY < r.h / 2 && !tttBoard[i] && token.wasHit) {
+      if (distX < r.w / 2 && distY < r.h / 2 && !tttBoard[j] && token.wasHit) {
         const speed = Math.hypot(token.vx, token.vy);
         // only snap into place when slow enough
         if (speed <= SNAP_SPEED_THRESHOLD) {
@@ -378,8 +424,9 @@ function update() {
           playSound("place");
           // short delay so player sees the snap
           setTimeout(() => {
-            placeTokenInCell(i, token.type);
-            token = null;
+            if (placeTokenInCell(j, token.type)) {
+                // Token is effectively consumed
+            }
             const res = checkWinner();
             if (res === "X" || res === "O") {
               gameOver = true;
@@ -388,21 +435,30 @@ function update() {
               gameOver = true;
               showOverlay("Tie Game");
             } else {
-              // spawn next token after a short pause
-              setTimeout(() => {
-                spawnToken();
-              }, 300);
+              // spawn next token after a short pause if no tokens left?
+              // For multiball, we might want to keep spawning or ensure at least one ball is in play.
+              // Let's just spawn another one to keep the game going if count is low
+              // if (tokens.length === 0) {
+              //     setTimeout(() => {
+              //       spawnToken();
+              //     }, 300);
+              // }
+              // Auto-spawn loop handles this now
             }
           }, 90);
+          
+          // Remove token immediately from update loop so it doesn't move or collide
+          tokens.splice(i, 1);
+          tokenRemoved = true;
           break;
-        } else {
-          // If still too fast, you might want a small visual hint later (optional)
         }
       }
     }
+    
+    if (tokenRemoved) continue;
 
     // out of bounds -> remove a random mark from the losing player, then respawn
-    if (token && (token.x < -50 || token.x > WIDTH + 50)) {
+    if (token.x < -50 || token.x > WIDTH + 50) {
       // determine which side lost: token passed left -> left lost; passed right -> right lost
       if (token.x < -50) {
         // left lost a pong point -> remove a random X
@@ -410,8 +466,14 @@ function update() {
       } else {
         removeRandomTokenFor("O");
       }
-      // respawn token
-      spawnToken();
+      // remove this token
+      tokens.splice(i, 1);
+      
+      // if no tokens left, spawn one
+      // if (tokens.length === 0) {
+      //     spawnToken();
+      // }
+      // Auto-spawn loop handles this
     }
   }
 
@@ -463,8 +525,8 @@ function draw() {
   // paddles
   drawRect(left.x, left.y, left.w, left.h, "#e6eef8");
   drawRect(right.x, right.y, right.w, right.h, "#e6eef8");
-  // token
-  if (token) {
+  // tokens
+  for (const token of tokens) {
     ctx.fillStyle = token.type === "X" ? "#ffdca3" : "#a8f0c3";
     ctx.beginPath();
     ctx.arc(token.x, token.y, token.r, 0, Math.PI * 2);
@@ -474,7 +536,22 @@ function draw() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(token.type, token.x, token.y);
+    
+    // token hit flash ring
+    if (token.hitFlash && token.hitFlash > 0) {
+        const t = token.hitFlash;
+        const max = 18;
+        const r = token.r + (1 - t / 0.35) * max;
+        ctx.strokeStyle = "rgba(255,255,255," + 0.6 * (t / 0.35) + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(token.x, token.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        // decay
+        token.hitFlash = Math.max(0, token.hitFlash - 0.016);
+    }
   }
+  
   // draw particles
   if (particles.length) {
     ctx.save();
@@ -488,19 +565,6 @@ function draw() {
     }
     ctx.restore();
     ctx.globalAlpha = 1;
-  }
-  // token hit flash ring
-  if (token && token.hitFlash && token.hitFlash > 0) {
-    const t = token.hitFlash;
-    const max = 18;
-    const r = token.r + (1 - t / 0.35) * max;
-    ctx.strokeStyle = "rgba(255,255,255," + 0.6 * (t / 0.35) + ")";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(token.x, token.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    // decay
-    token.hitFlash = Math.max(0, token.hitFlash - 0.016);
   }
 }
 
@@ -519,6 +583,9 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "a" || e.key === "A") {
     aiEnabled = !aiEnabled;
     saveSettings();
+  }
+  if (e.key === "m" || e.key === "M") {
+      spawnToken();
   }
   keys[e.key] = true;
 });
